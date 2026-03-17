@@ -708,18 +708,40 @@ impl Globals {
                 // before.
                 let mut fs = vec![];
                 let mut i = 0;
+                let mut past_trimming = first_symbol_to_show == 0;
                 for frame in bt.0.frames().iter() {
-                    for symbol in frame.symbols().iter() {
-                        i += 1;
-                        if (i - 1) < first_symbol_to_show {
-                            continue;
+                    let symbols = frame.symbols();
+                    if symbols.is_empty() {
+                        // Frame has no resolved symbols (missing debug info).
+                        // Include a synthetic entry if we're past the trimming
+                        // zone, so this frame is not silently dropped.
+                        if past_trimming {
+                            let s = format!(
+                                "{:?}: ??? (???:0:0)",
+                                frame.ip()
+                            );
+                            let &mut ftbl_idx =
+                                ftbl_indices.entry(s).or_insert_with(|| {
+                                    next_ftbl_idx += 1;
+                                    next_ftbl_idx - 1
+                                });
+                            fs.push(ftbl_idx);
                         }
-                        let s = Backtrace::frame_to_string(frame, symbol);
-                        let &mut ftbl_idx = ftbl_indices.entry(s).or_insert_with(|| {
-                            next_ftbl_idx += 1;
-                            next_ftbl_idx - 1
-                        });
-                        fs.push(ftbl_idx);
+                    } else {
+                        for symbol in symbols {
+                            i += 1;
+                            if (i - 1) < first_symbol_to_show {
+                                continue;
+                            }
+                            past_trimming = true;
+                            let s = Backtrace::frame_to_string(frame, symbol);
+                            let &mut ftbl_idx =
+                                ftbl_indices.entry(s).or_insert_with(|| {
+                                    next_ftbl_idx += 1;
+                                    next_ftbl_idx - 1
+                                });
+                            fs.push(ftbl_idx);
+                        }
                     }
                 }
 
@@ -1533,8 +1555,13 @@ impl Backtrace {
     #[allow(dead_code)]
     fn eprint(&self) {
         for frame in self.0.frames().iter() {
-            for symbol in frame.symbols().iter() {
-                eprintln!("{}", Backtrace::frame_to_string(frame, symbol));
+            let symbols = frame.symbols();
+            if symbols.is_empty() {
+                eprintln!("{:?}: ???", frame.ip());
+            } else {
+                for symbol in symbols {
+                    eprintln!("{}", Backtrace::frame_to_string(frame, symbol));
+                }
             }
         }
     }

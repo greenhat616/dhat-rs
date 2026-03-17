@@ -33,4 +33,5 @@ serial_test = "0.5"
 [profile.bench]
 debug = 1
 [profile.release]
-debug = 1
+debug = 0
+strip = true
